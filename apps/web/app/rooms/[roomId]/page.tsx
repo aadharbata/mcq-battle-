@@ -29,7 +29,7 @@ interface SessionUser {
 }
 
 interface RoomLobbyProps {
-  params: Promise<{ roomId: string }> | { roomId: string };
+    params: Promise<{ roomId: string }>;
 }
 
 export default function RoomLobby({ params }: RoomLobbyProps) {
