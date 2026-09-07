@@ -34,7 +34,7 @@ interface QuizState {
 }
 
 interface QuizPageProps {
-  params: Promise<{ roomId: string }> | { roomId: string };
+  params: Promise<{ roomId: string }>;
 }
 
 interface SessionUser {
