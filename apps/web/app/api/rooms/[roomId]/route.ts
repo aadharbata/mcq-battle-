@@ -1,77 +1,61 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@repo/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/admin";
 
 const prisma = new PrismaClient();
 
-export async function GET(
+export async function PUT(
     request: NextRequest,
-    { params }: { params: { roomId: string } }
+    context: { params: Promise<{ questionId: string }> }
 ) {
     try {
-        // Check authentication
-        const session = await getServerSession(authOptions);
-        if (!session?.user) {
+        const { error } = await requireAdmin();
+        if (error) return error;
+
+        const { questionId } = await context.params;
+        const questionIdNum = parseInt(questionId);
+
+        if (isNaN(questionIdNum)) {
             return NextResponse.json(
-                { error: { code: 401, message: "Unauthorized: missing or invalid token" } },
-                { status: 401 }
+                { error: { code: 400, message: "Invalid question ID" } },
+                { status: 400 }
             );
         }
 
-        const { roomId } = await params;
+        const body = await request.json();
+        const { text, options, correctIdx } = body;
 
-        // Get room with host and participants
-        const room = await prisma.room.findUnique({
-            where: { id: roomId },
-            include: {
-                host: {
-                    select: {
-                        id: true,
-                        name: true
-                    }
-                },
-                roomParticipants: {
-                    include: {
-                        user: {
-                            select: {
-                                id: true,
-                                name: true
-                            }
-                        }
-                    }
-                }
-            }
+        if (!text || !options || !Array.isArray(options) || options.length !== 4 || 
+            typeof correctIdx !== 'number' || correctIdx < 0 || correctIdx >= 4) {
+            return NextResponse.json(
+                { error: { code: 400, message: "Invalid question format" } },
+                { status: 400 }
+            );
+        }
+
+        const existingQuestion = await prisma.question.findUnique({
+            where: { id: questionIdNum }
         });
 
-        if (!room) {
+        if (!existingQuestion) {
             return NextResponse.json(
-                { error: { code: 404, message: "Room not found" } },
+                { error: { code: 404, message: "Question not found" } },
                 { status: 404 }
             );
         }
 
-        // Format response according to specification
-        const response = {
-            id: room.id,
-            hostId: room.hostId,
-            hostName: room.host.name || "Anonymous",
-            isActive: room.isActive,
-            maxPlayers: room.maxPlayers,
-            requiresPassword: !!room.password,
-            participantCount: room.roomParticipants.length,
-            participants: room.roomParticipants.map(participant => ({
-                userId: participant.userId,
-                userName: participant.user.name || "Anonymous",
-                score: participant.score,
-                joinedAt: participant.joinedAt.toISOString()
-            })),
-            createdAt: room.createdAt.toISOString()
-        };
+        const updatedQuestion = await prisma.question.update({
+            where: { id: questionIdNum },
+            data: {
+                text,
+                options,
+                correctIdx
+            }
+        });
 
-        return NextResponse.json(response);
+        return NextResponse.json(updatedQuestion);
     } catch (error) {
-        console.error("Error fetching room:", error);
+        console.error("Error updating question:", error);
         return NextResponse.json(
             { error: { code: 500, message: "Internal Server Error: unexpected exception" } },
             { status: 500 }
@@ -81,53 +65,43 @@ export async function GET(
 
 export async function DELETE(
     request: NextRequest,
-    context: { params: { roomId: string } }
+    context: { params: Promise<{ questionId: string }> }
 ) {
     try {
-        // Check authentication
-        const session = await getServerSession(authOptions);
-        if (!session?.user?.id) {
+        const { error } = await requireAdmin();
+        if (error) return error;
+
+        const { questionId } = await context.params;
+        const questionIdNum = parseInt(questionId);
+
+        if (isNaN(questionIdNum)) {
             return NextResponse.json(
-                { error: { code: 401, message: "Unauthorized: missing or invalid token" } },
-                { status: 401 }
+                { error: { code: 400, message: "Invalid question ID" } },
+                { status: 400 }
             );
         }
 
-        const { roomId } = await context.params;
-        const userId = parseInt(session.user.id);
-
-        // Get room to check ownership
-        const room = await prisma.room.findUnique({
-            where: { id: roomId }
+        const existingQuestion = await prisma.question.findUnique({
+            where: { id: questionIdNum }
         });
 
-        if (!room) {
+        if (!existingQuestion) {
             return NextResponse.json(
-                { error: { code: 404, message: "Room not found" } },
+                { error: { code: 404, message: "Question not found" } },
                 { status: 404 }
             );
         }
 
-        // Check if user is the host
-        if (room.hostId !== userId) {
-            return NextResponse.json(
-                { error: { code: 403, message: "Only the host can delete this room" } },
-                { status: 403 }
-            );
-        }
-
-        // Delete the room (this will cascade delete participants due to Prisma relations)
-        await prisma.room.delete({
-            where: { id: roomId }
+        await prisma.question.delete({
+            where: { id: questionIdNum }
         });
 
-        // Return 204 No Content as specified
         return new NextResponse(null, { status: 204 });
     } catch (error) {
-        console.error("Error deleting room:", error);
+        console.error("Error deleting question:", error);
         return NextResponse.json(
             { error: { code: 500, message: "Internal Server Error: unexpected exception" } },
             { status: 500 }
         );
     }
-} 
+}
