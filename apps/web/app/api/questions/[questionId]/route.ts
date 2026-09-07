@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 
 export async function PUT(
     request: NextRequest,
-    context: { params: { questionId: string } }
+    context: { params: Promise<{ questionId: string }> }
 ) {
     try {
         const { error } = await requireAdmin();
@@ -65,7 +65,7 @@ export async function PUT(
 
 export async function DELETE(
     request: NextRequest,
-    context: { params: { questionId: string } }
+    context: { params: Promise<{ questionId: string }> }
 ) {
     try {
         const { error } = await requireAdmin();
@@ -104,4 +104,4 @@ export async function DELETE(
             { status: 500 }
         );
     }
-} 
+}
